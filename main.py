@@ -2,89 +2,71 @@ import streamlit as st
 import pydicom
 import cv2
 import numpy as np
-import os
-import tempfile
+import io
 
-# 1. Page Configuration
-st.set_page_config(page_title="DICOM to MP4 Pro", layout="centered")
+# 1. Page Config for Speed
+st.set_page_config(page_title="Fast DICOM", layout="centered")
 
-# 2. Professional Dark Medical UI (CSS)
+# 2. Ultra-Fast UI
 st.markdown("""
     <style>
-    .main { background-color: #000000; }
-    body { color: #ffffff; }
+    .main { background-color: #000; }
     .stButton>button { 
-        background-color: #25D366; 
-        color: white; 
-        border-radius: 8px; 
-        height: 3em;
-        width: 100%;
-        font-weight: bold;
-        border: none;
+        background-color: #25D366; color: white; 
+        border-radius: 5px; height: 3.5em; width: 100%;
+        font-size: 20px; font-weight: bold;
     }
-    .stButton>button:hover { background-color: #128C7E; color: white; }
-    h1, p, label { color: #ffffff !important; text-align: center; }
-    .uploadedFile { color: #ffffff; }
+    h1, p { color: white; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Medical DICOM Converter ⚕️")
-st.write("Convert DICOM slices to WhatsApp-compatible MP4 videos.")
+st.title("Fast Medical Converter ⚡")
 
-# 3. File Uploader
-uploaded_files = st.file_uploader("Upload DCM Files", accept_multiple_files=True)
+uploaded_files = st.file_uploader("Upload DICOM", accept_multiple_files=True)
 
 if uploaded_files:
-    if st.button("GENERATE WHATSAPP VIDEO"):
-        with st.spinner("Processing medical data..."):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                slices = []
+    if st.button("CONVERT NOW (FAST)"):
+        # Progress bar for better UX
+        progress_bar = st.progress(0)
+        slices = []
+        
+        # Sort files to maintain sequence
+        files = sorted(uploaded_files, key=lambda x: x.name)
+        
+        for i, f in enumerate(files):
+            try:
+                ds = pydicom.dcmread(f)
+                img = ds.pixel_array.astype(float)
+                # Fast Normalization
+                img = ((img - np.min(img)) / (np.max(img) - np.min(img)) * 255).astype(np.uint8)
+                img = cv2.resize(img, (512, 512))
+                img_bgr = cv2.merge([img, img, img])
+                slices.append(img_bgr)
+                progress_bar.progress((i + 1) / len(files))
+            except:
+                continue
+
+        if slices:
+            # Create video in a temporary path for maximum speed
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
+                output_path = tmp.name
                 
-                # Sort files by name to ensure correct video sequence
-                uploaded_files.sort(key=lambda x: x.name)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, 15, (512, 512))
+            
+            for s in slices:
+                out.write(s)
+            out.release()
 
-                for f in uploaded_files:
-                    try:
-                        # Read DICOM
-                        ds = pydicom.dcmread(f)
-                        img = ds.pixel_array.astype(float)
-                        
-                        # Normalize pixel values for display (0-255)
-                        img = (np.maximum(img, 0) / img.max()) * 255.0
-                        img = np.uint8(img)
-                        
-                        # Resize for mobile compatibility
-                        img = cv2.resize(img, (512, 512))
-                        
-                        # Convert to 3-channel BGR (CRITICAL for WhatsApp playback)
-                        img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-                        
-                        # OPTIONAL: Add Brand Name/Watermark in the corner
-                        cv2.putText(img_bgr, 'DR_MOH_SYSTEM', (20, 480), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                        
-                        slices.append(img_bgr)
-                    except Exception as e:
-                        st.error(f"Error processing {f.name}")
+            # Read for download
+            with open(output_path, "rb") as f:
+                data = f.read()
 
-                if slices:
-                    output_path = os.path.join(tmpdir, "patient_scan.mp4")
-                    
-                    # 4. Video Writer Settings (mp4v is the most stable for Render/Linux)
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
-                    # 10 FPS is ideal for medical viewing
-                    out = cv2.VideoWriter(output_path, fourcc, 10, (512, 512), True)
-                    
-                    for s in slices:
-                        out.write(s)
-                    out.release()
-                    
-                    # 5. Result and Download
-                    st.success("Conversion Complete!")
-                    with open(output_path, "rb") as vid:
-                        st.download_button(
-                            label="📥 DOWNLOAD VIDEO FOR WHATSAPP",
-                            data=vid,
-                            file_name="Medical_Report.mp4",
-                            mime="video/mp4"
-                        )
+            st.success("Lightning Fast Conversion Done!")
+            st.download_button(
+                label="📥 DOWNLOAD MP4",
+                data=data,
+                file_name="Fast_Scan.mp4",
+                mime="video/mp4"
+            )
