@@ -1,93 +1,79 @@
-import os
+import streamlit as st
+import pydicom
 import cv2
 import numpy as np
-import pydicom
-import shutil
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+import os
+import tempfile
 
-app = FastAPI()
+# 1. Page Settings
+st.set_page_config(page_title="DICOM to MP4 Professional", layout="centered")
 
-# Pure English UI Design
-HTML_INTERFACE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DICOM to MP4 Converter</title>
+# 2. Professional Dark Theme (CSS)
+st.markdown("""
     <style>
-        :root { --primary: #2563eb; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .container { background: var(--card); padding: 2.5rem; border-radius: 1rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); width: 100%; max-width: 400px; text-align: center; border: 1px solid #334155; }
-        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #60a5fa; }
-        p { color: #94a3b8; font-size: 0.9rem; margin-bottom: 2rem; }
-        .drop-zone { border: 2px dashed #475569; padding: 2rem; border-radius: 0.75rem; margin-bottom: 1.5rem; transition: 0.3s; }
-        .drop-zone:hover { border-color: var(--primary); background: #1e293b; }
-        input[type="file"] { margin-bottom: 1rem; width: 100%; cursor: pointer; color: #94a3b8; }
-        button { background: var(--primary); color: white; border: none; padding: 1rem; border-radius: 0.5rem; font-weight: bold; width: 100%; cursor: pointer; transition: 0.2s; font-size: 1rem; }
-        button:hover { background: #1d4ed8; transform: translateY(-1px); }
-        .info { margin-top: 1.5rem; font-size: 0.7rem; color: #64748b; }
+    .main { background-color: #000000; }
+    body { color: #ffffff; background-color: #000000; }
+    .stButton>button { 
+        background-color: #1a1a1a; 
+        color: #00ff00; 
+        border: 1px solid #333; 
+        border-radius: 5px; 
+        width: 100%;
+        font-weight: bold;
+    }
+    .stButton>button:hover { border: 1px solid #00ff00; color: #ffffff; }
+    h1, p, label { color: #ffffff !important; }
+    .uploadedFile { background-color: #111; }
     </style>
-</head>
-<body>
-    <div class="container">
-        <h1>DICOM Converter</h1>
-        <p>Medical Imaging Video Processor</p>
-        <form action="/convert/" method="post" enctype="multipart/form-data">
-            <div class="drop-zone">
-                <input type="file" name="files" multiple required accept=".dcm">
-            </div>
-            <button type="submit">Process & Download</button>
-        </form>
-        <div class="info">Supported: .dcm files only</div>
-    </div>
-</body>
-</html>
-"""
+    """, unsafe_allow_html=True)
 
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return HTML_INTERFACE
+st.title("Medical DICOM Converter")
+st.write("Upload your DCM files to generate a high-speed MP4 video.")
 
-@app.post("/convert/")
-async def convert_process(files: list[UploadFile] = File(...)):
-    temp_dir = "processing_vault"
-    if os.path.exists(temp_dir):
-        shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir)
+# 3. File Uploader
+uploaded_files = st.file_uploader("Select DICOM Files", accept_multiple_files=True)
 
-    # Save and Sort
-    valid_paths = []
-    for f in files:
-        path = os.path.join(temp_dir, f.filename)
-        with open(path, "wb") as buffer:
-            shutil.copyfileobj(f.file, buffer)
-        valid_paths.append(path)
-    
-    valid_paths.sort()
+if uploaded_files:
+    if st.button("PROCESS AND CONVERT"):
+        with st.spinner("Converting..."):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                slices = []
+                
+                # Processing each file
+                for f in uploaded_files:
+                    try:
+                        ds = pydicom.dcmread(f)
+                        img = ds.pixel_array.astype(float)
+                        
+                        # Rescaling pixel values
+                        img = (np.maximum(img, 0) / img.max()) * 255.0
+                        img = np.uint8(img)
+                        
+                        # Resize to 512x512 for better performance on Render
+                        img = cv2.resize(img, (512, 512))
+                        slices.append(img)
+                    except Exception as e:
+                        st.error(f"Error in file {f.name}")
 
-    # Frame Extraction
-    frames = []
-    for p in valid_paths:
-        try:
-            ds = pydicom.dcmread(p)
-            pixel_data = ds.pixel_array.astype(float)
-            pixel_data = (np.maximum(pixel_data, 0) / pixel_data.max()) * 255.0
-            frames.append(np.uint8(pixel_data))
-        except:
-            continue
-
-    if not frames:
-        raise HTTPException(status_code=400, detail="Processing failed: No valid frames found.")
-
-    # Video Assembly
-    output_file = "medical_scan_result.mp4"
-    h, w = frames[0].shape
-    writer = cv2.VideoWriter(output_file, cv2.VideoWriter_fourcc(*'mp4v'), 10, (w, h), False)
-    
-    for frame in frames:
-        writer.write(frame)
-    writer.release()
-
-    return FileResponse(output_file, media_type='video/mp4', filename="scan_output.mp4")
+                if slices:
+                    output_path = os.path.join(tmpdir, "output_video.mp4")
+                    
+                    # Using XVID codec for speed and compatibility
+                    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                    
+                    # FPS is set to 10 for balanced speed
+                    out = cv2.VideoWriter(output_path, communities=fourcc, fps=10, frameSize=(512, 512), isColor=False)
+                    
+                    for s in slices:
+                        out.write(s)
+                    out.release()
+                    
+                    # 4. Download Button
+                    with open(output_path, "rb") as vid:
+                        st.download_button(
+                            label="DOWNLOAD MP4 VIDEO",
+                            data=vid,
+                            file_name="doctor_view.mp4",
+                            mime="video/mp4"
+                        )
+                    st.success("Conversion Successful!")
