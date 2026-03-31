@@ -1,72 +1,52 @@
 import streamlit as st
 import pydicom
-import cv2
 import numpy as np
-import io
+import imageio
+import tempfile
+import os
 
-# 1. Page Config for Speed
-st.set_page_config(page_title="Fast DICOM", layout="centered")
+st.set_page_config(page_title="WhatsApp DICOM", layout="centered")
 
-# 2. Ultra-Fast UI
-st.markdown("""
-    <style>
-    .main { background-color: #000; }
-    .stButton>button { 
-        background-color: #25D366; color: white; 
-        border-radius: 5px; height: 3.5em; width: 100%;
-        font-size: 20px; font-weight: bold;
-    }
-    h1, p { color: white; text-align: center; }
-    </style>
-    """, unsafe_allow_html=True)
+# Professional UI
+st.markdown("<style>.stButton>button {background-color: #25D366; color: white; border-radius: 10px; width: 100%; font-weight: bold;}</style>", unsafe_allow_html=True)
 
-st.title("Fast Medical Converter ⚡")
+st.title("Medical DICOM to WhatsApp ⚕️")
 
-uploaded_files = st.file_uploader("Upload DICOM", accept_multiple_files=True)
+uploaded_files = st.file_uploader("Upload DICOM Files", accept_multiple_files=True)
 
 if uploaded_files:
-    if st.button("CONVERT NOW (FAST)"):
-        # Progress bar for better UX
-        progress_bar = st.progress(0)
-        slices = []
-        
-        # Sort files to maintain sequence
-        files = sorted(uploaded_files, key=lambda x: x.name)
-        
-        for i, f in enumerate(files):
-            try:
-                ds = pydicom.dcmread(f)
-                img = ds.pixel_array.astype(float)
-                # Fast Normalization
-                img = ((img - np.min(img)) / (np.max(img) - np.min(img)) * 255).astype(np.uint8)
-                img = cv2.resize(img, (512, 512))
-                img_bgr = cv2.merge([img, img, img])
-                slices.append(img_bgr)
-                progress_bar.progress((i + 1) / len(files))
-            except:
-                continue
-
-        if slices:
-            # Create video in a temporary path for maximum speed
-            import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
-                output_path = tmp.name
-                
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, 15, (512, 512))
+    if st.button("GENERATE FOR WHATSAPP"):
+        with st.spinner("Optimizing for WhatsApp..."):
+            slices = []
+            # Sort files
+            files = sorted(uploaded_files, key=lambda x: x.name)
             
-            for s in slices:
-                out.write(s)
-            out.release()
+            for f in files:
+                try:
+                    ds = pydicom.dcmread(f)
+                    img = ds.pixel_array.astype(float)
+                    # Fast Normalization
+                    img = ((img - np.min(img)) / (np.max(img) - np.min(img)) * 255).astype(np.uint8)
+                    slices.append(img)
+                except:
+                    continue
 
-            # Read for download
-            with open(output_path, "rb") as f:
-                data = f.read()
+            if slices:
+                # Create a temporary file
+                temp_dir = tempfile.gettempdir()
+                output_path = os.path.join(temp_dir, "whatsapp_video.mp4")
+                
+                # Using imageio with ffmpeg for H.264 encoding (The secret to WhatsApp compatibility)
+                # fps=15, quality=7, pixel_format='yuv420p' (Essential for mobile)
+                imageio.mimwrite(output_path, slices, fps=15, macro_block_size=16, 
+                                 ffmpeg_params=["-vcodec", "libx264", "-pix_fmt", "yuv420p"])
 
-            st.success("Lightning Fast Conversion Done!")
-            st.download_button(
-                label="📥 DOWNLOAD MP4",
-                data=data,
-                file_name="Fast_Scan.mp4",
-                mime="video/mp4"
-            )
+                with open(output_path, "rb") as vid:
+                    data = vid.read()
+                    st.success("Ready for WhatsApp! ✅")
+                    st.download_button(
+                        label="📥 DOWNLOAD & SHARE TO WHATSAPP",
+                        data=data,
+                        file_name="Medical_Scan.mp4",
+                        mime="video/mp4"
+                    )
