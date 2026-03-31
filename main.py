@@ -6,7 +6,7 @@ import os
 import tempfile
 
 # 1. Page Settings
-st.set_page_config(page_title="DICOM to MP4 Professional", layout="centered")
+st.set_page_config(page_title="DICOM Fast Converter", layout="centered")
 
 # 2. Professional Dark Theme (CSS)
 st.markdown("""
@@ -23,46 +23,40 @@ st.markdown("""
     }
     .stButton>button:hover { border: 1px solid #00ff00; color: #ffffff; }
     h1, p, label { color: #ffffff !important; }
-    .uploadedFile { background-color: #111; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Medical DICOM Converter")
-st.write("Upload your DCM files to generate a high-speed MP4 video.")
+st.title("Medical DICOM Converter (High Speed)")
+st.write("Upload DCM files. Processing is optimized for speed using XVID.")
 
 # 3. File Uploader
 uploaded_files = st.file_uploader("Select DICOM Files", accept_multiple_files=True)
 
 if uploaded_files:
     if st.button("PROCESS AND CONVERT"):
-        with st.spinner("Converting..."):
+        with st.spinner("Processing with XVID..."):
             with tempfile.TemporaryDirectory() as tmpdir:
                 slices = []
                 
-                # Processing each file
                 for f in uploaded_files:
                     try:
                         ds = pydicom.dcmread(f)
                         img = ds.pixel_array.astype(float)
-                        
-                        # Rescaling pixel values
                         img = (np.maximum(img, 0) / img.max()) * 255.0
                         img = np.uint8(img)
-                        
-                        # Resize to 512x512 for better performance on Render
+                        # Standard medical size for speed
                         img = cv2.resize(img, (512, 512))
                         slices.append(img)
                     except Exception as e:
-                        st.error(f"Error in file {f.name}")
+                        st.error(f"Error reading {f.name}")
 
                 if slices:
-                    output_path = os.path.join(tmpdir, "output_video.mp4")
+                    output_path = os.path.join(tmpdir, "output_video.avi")
                     
-                    # Using XVID codec for speed and compatibility
+                    # --- Optimized XVID Settings ---
                     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                    
-                    # FPS is set to 10 for balanced speed
-                    out = cv2.VideoWriter(output_path, communities=fourcc, fps=10, frameSize=(512, 512), isColor=False)
+                    # fps=10 for smooth viewing
+                    out = cv2.VideoWriter(output_path, fourcc, 10, (512, 512), False)
                     
                     for s in slices:
                         out.write(s)
@@ -71,9 +65,9 @@ if uploaded_files:
                     # 4. Download Button
                     with open(output_path, "rb") as vid:
                         st.download_button(
-                            label="DOWNLOAD MP4 VIDEO",
+                            label="DOWNLOAD VIDEO (XVID)",
                             data=vid,
-                            file_name="doctor_view.mp4",
-                            mime="video/mp4"
+                            file_name="medical_result.avi",
+                            mime="video/x-msvideo"
                         )
-                    st.success("Conversion Successful!")
+                    st.success("Fast Conversion Complete!")
