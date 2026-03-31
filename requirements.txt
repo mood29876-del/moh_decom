@@ -1,6 +1,4 @@
-fastapi
-uvicorn
-python-multipart
+streamlit
 pydicom
-numpy
 opencv-python-headless
+numpy
